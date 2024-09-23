@@ -3,13 +3,14 @@ from langchain_community.tools import TavilySearchResults
 from langchain_community.llms import Ollama
 from langchain import hub
 
+from dotenv import load_dotenv
 import os
 
-os.environ["TAVILY_API_KEY"]="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"
+load_dotenv()
 
 llm=Ollama(model="gemma2:2b")
 
-query="What happened in the Barca Villareal game in September this year"
+query="What happened in the Barca Villareal game in September 2024"
 
 tools=[TavilySearchResults(max_results=2)]
 
