@@ -2,6 +2,10 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.prompts import PromptTemplate
+from langchain_community.llms import Ollama
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 def load_docs():
     loader=DirectoryLoader('./pdfs',glob="*.pdf",use_multithreading=True)
@@ -27,7 +31,7 @@ def createVectordb(texts,embeddings,persist_path):
         flag = False
         print(f"Error creating vector database: {str(e)}") 
         
-    return flag,vector_db
+    return flag
 
 
 def ingest():
@@ -35,21 +39,54 @@ def ingest():
     texts=split_docs(docs)
     embedding_model=get_embedding_model()
     
-    flag,db=createVectordb(texts,embedding_model,"./chroma")
+    flag=createVectordb(texts,embedding_model,"./chroma")
     if flag:
         print("Vector db created")
     else:
         print("Something went wrong")
         
-    testQuery(db)
         
 
 
-def testQuery(db):
-    query="Who are the authors of DeepRED"
-    ans=db.similarity_search(query)
-    print(ans[0].page_content)
+def getRetreiver():
+    emb_model=HuggingFaceEmbeddings(model_name="thenlper/gte-large",model_kwargs={'device':'cpu'})
+    db=Chroma(persist_directory="./chroma",embedding_function=emb_model)
+    return db
     
+template = """<s>[INST] Given the context - {context} </s>[INST] [INST] Answer the following question - {question}[/INST]"""
 
+
+def create_prompt():
+    prompt=PromptTemplate(template=template,input_variables=['context','question'])
+    return prompt
+
+
+def qna_bot():
+    db=getRetreiver()
+    retreiver=db.as_retriever(search_kwargs={"k":2})
+    
+    llm=Ollama(model="gemma2:2b")
+    print("LLM loaded ",llm)
+    
+    chain=(
+        {"context": retreiver, "question": RunnablePassthrough()}
+        | create_prompt()
+        | llm 
+        | StrOutputParser()
+    )
+    
+    query=""
+    
+    while True:
+        query=input("Your query: ")
+        if query=="quit":
+            break
+        output=chain.invoke(query)
+        print(output)
+        
+    print("You just used a custombot")
+        
+    
 if __name__=="__main__":
     ingest()
+    qna_bot()
